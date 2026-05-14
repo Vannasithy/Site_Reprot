@@ -417,6 +417,30 @@ input[type=file]{display:none}
 <input type="file" id="fi-cam" accept="image/*" capture="environment">
 <input type="file" id="fi-gal" accept="image/*">
 
+<!-- iOS Share Overlay -->
+<div class="sheet-bg" id="ios-share-sheet">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="sheet-title" style="margin:0">📄 Your PDF is ready!</div>
+      <button class="btn btn-out btn-sm" onclick="closeIOSShare()" style="min-height:32px;padding:5px 10px">✕</button>
+    </div>
+    <div style="background:var(--bg);border-radius:var(--rs);padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--muted);line-height:1.7">
+        iOS cannot download files directly.<br>
+        Tap the button below to <strong style="color:var(--txt)">open the PDF</strong>, then use
+        Safari's <strong style="color:var(--txt)">Share button</strong> <span style="font-size:16px">⎙</span>
+        to send it via WhatsApp, Telegram, Email, AirDrop, or save to Files.
+      </div>
+    </div>
+    <button id="ios-open-btn" class="btn btn-acc btn-full" style="margin-bottom:10px" onclick="openIOSPDF()">
+      🔗 Open PDF to Share / បើក PDF
+    </button>
+    <div style="font-size:11px;color:var(--muted);text-align:center;line-height:1.6">
+      In the PDF viewer: tap <strong style="color:var(--txt)">Share ⎙</strong> → choose WhatsApp / Telegram / Email / Save to Files
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -1134,8 +1158,29 @@ async function generatePDF() {
     tpl.innerHTML=''; tpl.style.display='none';
     hideLoad();
     const fname=`LHB_SiteReport_${v.date||'report'}.pdf`;
-    doc.save(fname);
-    showToast('✅ PDF ready! / PDF បានរក្សាទុក!',4000);
+    const pdfBlob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(pdfBlob);
+
+    // Detect iOS — iOS Safari cannot trigger file downloads programmatically.
+    // Instead we open the PDF blob in a new tab so the user can use
+    // Safari's native Share Sheet to AirDrop, send via WhatsApp, email, etc.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      // Show iOS share instructions overlay
+      showIOSShare(blobUrl, fname, pdfBlob);
+    } else {
+      // Desktop / Android: normal download
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      showToast('✅ PDF downloaded! / PDF បានរក្សាទុក!', 4000);
+    }
   } catch(err) {
     hideLoad();
     showToast('❌ Error: ' + err.message, 5000);
@@ -1153,6 +1198,25 @@ function showToast(msg,dur=2800){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
   clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+/* iOS PDF share helpers */
+let _iosBlobUrl = null;
+function showIOSShare(blobUrl, fname, blob) {
+  _iosBlobUrl = blobUrl;
+  document.getElementById('ios-share-sheet').classList.add('open');
+}
+function openIOSPDF() {
+  if (_iosBlobUrl) {
+    window.open(_iosBlobUrl, '_blank');
+  }
+}
+function closeIOSShare() {
+  document.getElementById('ios-share-sheet').classList.remove('open');
+  if (_iosBlobUrl) {
+    URL.revokeObjectURL(_iosBlobUrl);
+    _iosBlobUrl = null;
+  }
 }
 </script>
 </body>
